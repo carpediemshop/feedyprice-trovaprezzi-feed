@@ -252,11 +252,13 @@ export async function saveFeedState({
       lastGeneratedAt: new Date(),
     },
   });
+}
 export async function getFeedState(shop) {
   return prisma.feedState.findUnique({
     where: { shop },
   });
 }
+
 export async function getFeedDiagnosticsForShop(admin) {
   const { shop, products } = await loadCatalogData(admin);
   const analysis = buildFeedAnalysis(products, shop?.primaryDomain?.url ?? "");
