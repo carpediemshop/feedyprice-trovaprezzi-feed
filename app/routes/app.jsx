@@ -6,7 +6,7 @@ import {
   getFeedState,
   loadCatalogData,
   saveFeedState,
-} from "../trovaprezzi-feed.server";
+} from "../lib/trovaprezzi-feed.server";
 
 export async function loader({ request }) {
   const { admin, session } = await authenticate.admin(request);

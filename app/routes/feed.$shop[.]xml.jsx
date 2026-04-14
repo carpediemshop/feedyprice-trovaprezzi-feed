@@ -1,4 +1,4 @@
-﻿import { getFeedState } from "../trovaprezzi-feed.server";
+﻿import { getFeedState } from "../lib/trovaprezzi-feed.server";
 
 export async function loader({ params }) {
   const shop = params.shop;
