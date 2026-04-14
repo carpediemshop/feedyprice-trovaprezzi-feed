@@ -23,7 +23,6 @@ const PRODUCTS_QUERY = `#graphql
               node {
                 price
                 barcode
-                inventoryQuantity
               }
             }
           }
@@ -48,10 +47,6 @@ function normalizeProducts(rawProducts) {
     const price = Number(firstVariant?.price || 0);
     const image = product?.featuredImage?.url || "";
     const barcode = firstVariant?.barcode || "";
-    const inventoryQuantity =
-      typeof firstVariant?.inventoryQuantity === "number"
-        ? firstVariant.inventoryQuantity
-        : 0;
 
     const isIncluded =
       product?.status === "ACTIVE" && Boolean(image) && price > 0;
@@ -76,10 +71,9 @@ function normalizeProducts(rawProducts) {
       image,
       price,
       barcode,
-      inventoryQuantity,
       isIncluded,
       exclusionReason,
-      availability: inventoryQuantity > 0 ? "in stock" : "out of stock",
+      availability: "in stock",
       category:
         product.productType?.trim() || product.vendor?.trim() || "Altro",
     };
@@ -147,6 +141,13 @@ async function fetchShopProducts(admin) {
   });
 
   const responseJson = await response.json();
+
+  if (responseJson?.errors?.length) {
+    throw new Error(
+      `Shopify GraphQL errors: ${JSON.stringify(responseJson.errors)}`,
+    );
+  }
+
   const rawProducts =
     responseJson?.data?.products?.edges?.map((edge) => edge.node) || [];
 
@@ -160,27 +161,52 @@ function formatDateTime(value) {
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
-  const products = await fetchShopProducts(admin);
-  const dashboard = buildDashboardData(products);
+
   const savedFeed = await prisma.feedState.findUnique({
     where: { shop: session.shop },
   });
 
-  return {
-    appName: "FeedyPrice – Trovaprezzi Feed",
-    planName: "Trial attivo",
-    shop: session.shop,
-    feedStatus: savedFeed?.feedStatus || dashboard.feedStatus,
-    feedUrl: savedFeed?.feedUrl || buildFeedUrl(session.shop),
-    lastUpdated: savedFeed?.lastGeneratedAt
-      ? formatDateTime(savedFeed.lastGeneratedAt)
-      : "Mai",
-    includedProducts: savedFeed?.includedCount ?? dashboard.includedCount,
-    excludedProducts: savedFeed?.excludedCount ?? dashboard.excludedCount,
-    xmlPreview: savedFeed?.xmlContent || "",
-    excludedPreview: dashboard.excludedPreview,
-    successMessage: "",
-  };
+  try {
+    const products = await fetchShopProducts(admin);
+    const dashboard = buildDashboardData(products);
+
+    return {
+      appName: "FeedyPrice – Trovaprezzi Feed",
+      planName: "Trial attivo",
+      shop: session.shop,
+      feedStatus: savedFeed?.feedStatus || dashboard.feedStatus,
+      feedUrl: savedFeed?.feedUrl || buildFeedUrl(session.shop),
+      lastUpdated: savedFeed?.lastGeneratedAt
+        ? formatDateTime(savedFeed.lastGeneratedAt)
+        : "Mai",
+      includedProducts: savedFeed?.includedCount ?? dashboard.includedCount,
+      excludedProducts: savedFeed?.excludedCount ?? dashboard.excludedCount,
+      xmlPreview: savedFeed?.xmlContent || "",
+      excludedPreview: dashboard.excludedPreview,
+      successMessage: "",
+      appError: "",
+    };
+  } catch (error) {
+    return {
+      appName: "FeedyPrice – Trovaprezzi Feed",
+      planName: "Trial attivo",
+      shop: session.shop,
+      feedStatus: savedFeed?.feedStatus || "Errore caricamento catalogo",
+      feedUrl: savedFeed?.feedUrl || buildFeedUrl(session.shop),
+      lastUpdated: savedFeed?.lastGeneratedAt
+        ? formatDateTime(savedFeed.lastGeneratedAt)
+        : "Mai",
+      includedProducts: savedFeed?.includedCount ?? 0,
+      excludedProducts: savedFeed?.excludedCount ?? 0,
+      xmlPreview: savedFeed?.xmlContent || "",
+      excludedPreview: [],
+      successMessage: "",
+      appError:
+        error instanceof Error
+          ? error.message
+          : "Errore sconosciuto durante il caricamento prodotti.",
+    };
+  }
 };
 
 export const action = async ({ request }) => {
@@ -236,6 +262,7 @@ export const action = async ({ request }) => {
     excludedProducts: dashboard.excludedCount,
     xmlPreview: xmlContent,
     excludedPreview: dashboard.excludedPreview,
+    appError: "",
   };
 };
 
@@ -258,6 +285,7 @@ export default function Index() {
     excludedPreview: fetcher.data?.excludedPreview ?? loaderData.excludedPreview,
     successMessage:
       fetcher.data?.successMessage ?? loaderData.successMessage ?? "",
+    appError: fetcher.data?.appError ?? loaderData.appError ?? "",
   };
 
   const isSubmitting = fetcher.state !== "idle";
@@ -282,6 +310,19 @@ export default function Index() {
           stabile e professionale, direttamente dal tuo store Shopify.
         </s-paragraph>
       </s-section>
+
+      {currentData.appError && (
+        <s-section heading="Errore applicazione">
+          <s-box
+            padding="base"
+            borderWidth="base"
+            borderRadius="base"
+            background="subdued"
+          >
+            <s-paragraph>{currentData.appError}</s-paragraph>
+          </s-box>
+        </s-section>
+      )}
 
       <s-section heading="Panoramica feed">
         <s-stack direction="block" gap="base">
@@ -442,7 +483,7 @@ export default function Index() {
           Store collegato: <s-text>{currentData.shop}</s-text>
         </s-paragraph>
         <s-paragraph>
-          Il feed e il suo stato ora vengono salvati nel database locale.
+          Il feed e il suo stato ora vengono salvati nel database.
         </s-paragraph>
       </s-section>
     </s-page>
