@@ -1,5 +1,6 @@
 ﻿export async function loader() {
-  return new Response(JSON.stringify(global.feedErrors || []), {
-    headers: { "Content-Type": "application/json" },
+  return Response.json({
+    errors: global.feedErrors || [],
+    generatedAt: new Date().toISOString(),
   });
 }
