@@ -1,9 +1,4 @@
-﻿import prisma from "../db.server";
-import { unauthenticated } from "../shopify.server";
-
-function trimValue(value) {
-  return value == null ? "" : String(value).trim();
-}
+﻿import prisma from "./db.server";
 
 function escapeXml(value) {
   return String(value ?? "")
@@ -15,310 +10,252 @@ function escapeXml(value) {
 }
 
 function normalizeMoney(value) {
-  const raw = trimValue(value).replace(",", ".");
-  if (!raw) return "";
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return "";
-  return n.toFixed(2);
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return "0.00";
+  return number.toFixed(2);
 }
 
-function getDefaultShippingCost() {
-  return normalizeMoney(process.env.DEFAULT_SHIPPING_COST || "");
+function normalizeQuantity(value) {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.floor(number));
 }
 
-function getFeedUrl(shop) {
-  const base = trimValue(process.env.SHOPIFY_APP_URL).replace(/\/$/, "");
-  if (!base) return `/feed/${shop}.xml`;
-  return `${base}/feed/${shop}.xml`;
+export function getDefaultShippingCost() {
+  return normalizeMoney(process.env.DEFAULT_SHIPPING_COST ?? "0.00");
 }
 
-function getPublicProductUrl(shop, product) {
-  if (trimValue(product.onlineStoreUrl)) return trimValue(product.onlineStoreUrl);
-  return `https://${shop}/products/${product.handle}`;
+function getProductImage(product) {
+  return product?.images?.edges?.[0]?.node?.url ?? "";
 }
 
-function getFirstImageUrl(product) {
-  return trimValue(product?.images?.edges?.[0]?.node?.url);
+function getProductSku(product) {
+  return product?.variants?.edges?.[0]?.node?.sku?.trim?.() ?? "";
 }
 
-function getFirstVariant(product) {
-  return product?.variants?.edges?.[0]?.node || null;
+function getProductBarcode(product) {
+  return product?.variants?.edges?.[0]?.node?.barcode?.trim?.() ?? "";
 }
 
-function mapProductForFeed(product, shop) {
-  const variant = getFirstVariant(product);
+function getProductPrice(product) {
+  return normalizeMoney(product?.variants?.edges?.[0]?.node?.price ?? 0);
+}
 
-  const category =
-    trimValue(product?.categoryOverride?.value) || trimValue(product?.productType);
-
-  const ean =
-    trimValue(product?.eanOverride?.value) ||
-    trimValue(product?.gtinOverride?.value) ||
-    trimValue(variant?.barcode);
-
-  const sku = trimValue(variant?.sku);
-
-  const quantity =
-    Number.isFinite(Number(product?.totalInventory))
-      ? String(Number(product.totalInventory))
-      : "";
-
-  const shippingCost =
-    normalizeMoney(product?.shippingCost?.value) || getDefaultShippingCost();
-
-  const price = normalizeMoney(variant?.price);
-
-  const missing = [];
-  if (!category) missing.push("Categoria");
-  if (!ean) missing.push("EAN");
-  if (!shippingCost) missing.push("Spese di spedizione");
-  if (!sku) missing.push("SKU");
-  if (quantity === "") missing.push("Quantità");
-
-  if (!price) missing.push("Prezzo");
-
-  const mapped = {
-    name: trimValue(product?.title),
-    description: trimValue(product?.description) || trimValue(product?.title),
-    url: getPublicProductUrl(shop, product),
-    image: getFirstImageUrl(product),
-    price,
-    brand: trimValue(product?.vendor) || "N/D",
-    category,
-    ean,
-    shippingCost,
-    sku,
-    quantity,
-    availability: Number(quantity) > 0 ? "in stock" : "out of stock",
-  };
-
-  if (missing.length > 0) {
-    return {
-      included: false,
-      error: {
-        name: mapped.name || "Prodotto senza nome",
-        sku: mapped.sku || "-",
-        missing,
-      },
-    };
+function getProductQuantity(product) {
+  const variantQty = product?.variants?.edges?.[0]?.node?.inventoryQuantity;
+  if (variantQty !== null && variantQty !== undefined) {
+    return normalizeQuantity(variantQty);
   }
+  return normalizeQuantity(product?.totalInventory ?? 0);
+}
+
+function getProductCategory(product) {
+  const productType = product?.productType?.trim?.() ?? "";
+  return productType;
+}
+
+function getProductUrl(product, shopPrimaryDomainUrl) {
+  if (product?.onlineStoreUrl) return product.onlineStoreUrl;
+  if (!shopPrimaryDomainUrl) return "";
+  return `${shopPrimaryDomainUrl.replace(/\/$/, "")}/products/${product.handle}`;
+}
+
+function validateProduct(product, shippingCost, shopPrimaryDomainUrl) {
+  const errors = [];
+
+  const category = getProductCategory(product);
+  const ean = getProductBarcode(product);
+  const sku = getProductSku(product);
+  const quantity = getProductQuantity(product);
+  const url = getProductUrl(product, shopPrimaryDomainUrl);
+
+  if (!category) errors.push("Categoria mancante");
+  if (!ean) errors.push("EAN mancante");
+  if (!shippingCost) errors.push("Spese di spedizione mancanti");
+  if (!sku) errors.push("SKU mancante");
+  if (quantity <= 0) errors.push("Quantità non valida");
+  if (!url) errors.push("URL prodotto mancante");
 
   return {
-    included: true,
-    item: mapped,
+    isValid: errors.length === 0,
+    errors,
+    derived: {
+      category,
+      ean,
+      sku,
+      quantity,
+      url,
+      price: getProductPrice(product),
+      image: getProductImage(product),
+      shippingCost,
+    },
   };
 }
 
-async function fetchAllActiveProducts(admin) {
-  const allProducts = [];
-  let after = null;
-  let hasNextPage = true;
-
-  const query = `#graphql
-    query TrovaprezziProducts($after: String) {
-      products(first: 100, after: $after, query: "status:active") {
-        pageInfo {
-          hasNextPage
-          endCursor
+export async function loadCatalogData(admin) {
+  const response = await admin.graphql(
+    `#graphql
+      query TrovaprezziCatalog {
+        shop {
+          name
+          primaryDomain {
+            url
+          }
         }
-        edges {
-          node {
-            id
-            title
-            handle
-            description
-            vendor
-            productType
-            status
-            totalInventory
-            onlineStoreUrl
-
-            categoryOverride: metafield(namespace: "custom", key: "trovaprezzi_category") {
-              value
-            }
-
-            shippingCost: metafield(namespace: "custom", key: "shipping_cost") {
-              value
-            }
-
-            eanOverride: metafield(namespace: "custom", key: "ean") {
-              value
-            }
-
-            gtinOverride: metafield(namespace: "custom", key: "gtin") {
-              value
-            }
-
-            images(first: 1) {
-              edges {
-                node {
-                  url
+        products(first: 100) {
+          edges {
+            node {
+              id
+              title
+              handle
+              vendor
+              productType
+              status
+              totalInventory
+              onlineStoreUrl
+              images(first: 1) {
+                edges {
+                  node {
+                    url
+                  }
                 }
               }
-            }
-
-            variants(first: 1) {
-              edges {
-                node {
-                  sku
-                  barcode
-                  price
+              variants(first: 1) {
+                edges {
+                  node {
+                    sku
+                    price
+                    barcode
+                    inventoryQuantity
+                  }
                 }
               }
             }
           }
         }
       }
-    }
-  `;
+    `
+  );
 
-  while (hasNextPage) {
-    const response = await admin.graphql(query, {
-      variables: { after },
-    });
+  const json = await response.json();
 
-    const payload = await response.json();
-
-    if (payload?.errors?.length) {
-      throw new Error(payload.errors.map((e) => e.message).join(" | "));
-    }
-
-    const connection = payload?.data?.products;
-    if (!connection) {
-      throw new Error("Risposta Shopify non valida durante il caricamento prodotti.");
-    }
-
-    for (const edge of connection.edges || []) {
-      if (edge?.node) allProducts.push(edge.node);
-    }
-
-    hasNextPage = Boolean(connection?.pageInfo?.hasNextPage);
-    after = connection?.pageInfo?.endCursor || null;
+  if (json?.errors?.length) {
+    throw new Error(json.errors[0]?.message || "Errore GraphQL Shopify");
   }
 
-  return allProducts;
+  const products = json?.data?.products?.edges?.map((edge) => edge.node) ?? [];
+  const shop = json?.data?.shop ?? null;
+
+  return {
+    shop,
+    products,
+  };
 }
 
-function buildXml(items) {
-  const rows = items
-    .map((item) => {
-      return `  <product>
-    <name>${escapeXml(item.name)}</name>
-    <description>${escapeXml(item.description)}</description>
-    <url>${escapeXml(item.url)}</url>
-    <image>${escapeXml(item.image)}</image>
-    <price>${escapeXml(item.price)}</price>
-    <brand>${escapeXml(item.brand)}</brand>
-    <category>${escapeXml(item.category)}</category>
-    <ean>${escapeXml(item.ean)}</ean>
-    <shipping_cost>${escapeXml(item.shippingCost)}</shipping_cost>
-    <sku>${escapeXml(item.sku)}</sku>
-    <quantity>${escapeXml(item.quantity)}</quantity>
-    <availability>${escapeXml(item.availability)}</availability>
-  </product>`;
+export function buildFeedAnalysis(products, shopPrimaryDomainUrl) {
+  const shippingCost = getDefaultShippingCost();
+
+  const includedProducts = [];
+  const excludedProducts = [];
+
+  for (const product of products) {
+    const validation = validateProduct(product, shippingCost, shopPrimaryDomainUrl);
+
+    const baseItem = {
+      id: product.id,
+      title: product.title ?? "",
+      handle: product.handle ?? "",
+      vendor: product.vendor ?? "",
+      status: product.status ?? "",
+      productType: product.productType ?? "",
+      image: validation.derived.image,
+      url: validation.derived.url,
+      sku: validation.derived.sku,
+      ean: validation.derived.ean,
+      quantity: validation.derived.quantity,
+      price: validation.derived.price,
+      shippingCost: validation.derived.shippingCost,
+      category: validation.derived.category,
+    };
+
+    if (validation.isValid) {
+      includedProducts.push(baseItem);
+    } else {
+      excludedProducts.push({
+        ...baseItem,
+        errors: validation.errors,
+      });
+    }
+  }
+
+  return {
+    shippingCost,
+    includedProducts,
+    excludedProducts,
+  };
+}
+
+export function buildXmlFeed(products) {
+  const xmlItems = products
+    .map((product) => {
+      const availability = product.quantity > 0 ? "in stock" : "out of stock";
+
+      return `
+  <product>
+    <name>${escapeXml(product.title)}</name>
+    <description>${escapeXml(product.title)}</description>
+    <url>${escapeXml(product.url)}</url>
+    <image>${escapeXml(product.image)}</image>
+    <price>${escapeXml(product.price)}</price>
+    <brand>${escapeXml(product.vendor || "Senza marca")}</brand>
+    <category>${escapeXml(product.category)}</category>
+    <ean>${escapeXml(product.ean)}</ean>
+    <shipping_cost>${escapeXml(product.shippingCost)}</shipping_cost>
+    <sku>${escapeXml(product.sku)}</sku>
+    <quantity>${escapeXml(product.quantity)}</quantity>
+    <availability>${escapeXml(availability)}</availability>
+  </product>`.trim();
     })
     .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <products>
-${rows}
+${xmlItems}
 </products>`;
 }
 
-async function persistFeedState({ shop, xml, includedCount, excludedCount, feedStatus }) {
-  const now = new Date();
-
-  await prisma.feedState.upsert({
+export async function saveFeedState({
+  shop,
+  feedUrl,
+  xmlContent,
+  includedCount,
+  excludedCount,
+  feedStatus,
+}) {
+  return prisma.feedState.upsert({
     where: { shop },
     update: {
-      feedStatus,
-      feedUrl: getFeedUrl(shop),
+      feedUrl,
+      xmlContent,
       includedCount,
       excludedCount,
-      xmlContent: xml,
-      lastGeneratedAt: now,
+      feedStatus,
+      lastGeneratedAt: new Date(),
     },
     create: {
       shop,
-      feedStatus,
-      feedUrl: getFeedUrl(shop),
+      feedUrl,
+      xmlContent,
       includedCount,
       excludedCount,
-      xmlContent: xml,
-      lastGeneratedAt: now,
+      feedStatus,
+      lastGeneratedAt: new Date(),
     },
   });
-
-  return now.toISOString();
 }
 
-export async function generateFeedForShop(shop) {
-  const cleanShop = trimValue(shop);
-  if (!cleanShop) throw new Error("Shop mancante.");
-
-  const { admin } = await unauthenticated.admin(cleanShop);
-  const products = await fetchAllActiveProducts(admin);
-
-  const included = [];
-  const errors = [];
-
-  for (const product of products) {
-    const mapped = mapProductForFeed(product, cleanShop);
-    if (mapped.included) included.push(mapped.item);
-    else errors.push(mapped.error);
-  }
-
-  const xml = buildXml(included);
-
-  const generatedAt = await persistFeedState({
-    shop: cleanShop,
-    xml,
-    includedCount: included.length,
-    excludedCount: errors.length,
-    feedStatus:
-      errors.length > 0
-        ? "Generato con esclusioni"
-        : "Generato correttamente",
+export async function getFeedState(shop) {
+  return prisma.feedState.findUnique({
+    where: { shop },
   });
-
-  return {
-    shop: cleanShop,
-    xml,
-    errors,
-    generatedAt,
-    includedCount: included.length,
-    excludedCount: errors.length,
-    feedUrl: getFeedUrl(cleanShop),
-  };
-}
-
-export async function getFeedDiagnosticsForShop(shop) {
-  const cleanShop = trimValue(shop);
-  if (!cleanShop) throw new Error("Shop mancante.");
-
-  const { admin } = await unauthenticated.admin(cleanShop);
-  const products = await fetchAllActiveProducts(admin);
-
-  const errors = [];
-
-  for (const product of products) {
-    const mapped = mapProductForFeed(product, cleanShop);
-    if (!mapped.included) errors.push(mapped.error);
-  }
-
-  const state = await prisma.feedState.findUnique({
-    where: { shop: cleanShop },
-  });
-
-  return {
-    errors,
-    generatedAt: state?.lastGeneratedAt?.toISOString?.() || null,
-    feedUrl: getFeedUrl(cleanShop),
-    includedCount: state?.includedCount ?? null,
-    excludedCount: state?.excludedCount ?? errors.length,
-    status:
-      errors.length > 0
-        ? "Generato con esclusioni"
-        : "Generato correttamente",
-  };
 }
