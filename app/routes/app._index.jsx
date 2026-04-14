@@ -144,7 +144,7 @@ async function fetchShopProducts(admin) {
 
   if (responseJson?.errors?.length) {
     throw new Error(
-      `Shopify GraphQL errors: ${JSON.stringify(responseJson.errors)}`,
+      responseJson.errors.map((error) => error.message).join(" | "),
     );
   }
 
@@ -214,56 +214,74 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 
-  const products = await fetchShopProducts(admin);
-  const dashboard = buildDashboardData(products);
-  const xmlContent = buildXml(products);
-  const feedUrl = buildFeedUrl(session.shop);
-  const now = new Date();
+  try {
+    const products = await fetchShopProducts(admin);
+    const dashboard = buildDashboardData(products);
+    const xmlContent = buildXml(products);
+    const feedUrl = buildFeedUrl(session.shop);
+    const now = new Date();
 
-  let feedStatus = dashboard.feedStatus;
-  let successMessage = "Azione non riconosciuta.";
+    let feedStatus = dashboard.feedStatus;
+    let successMessage = "Azione non riconosciuta.";
 
-  if (intent === "generate-feed") {
-    feedStatus = "Generato correttamente";
-    successMessage = "Feed XML generato con successo.";
-  } else if (intent === "refresh-feed") {
-    feedStatus = "Aggiornato correttamente";
-    successMessage = "Feed XML aggiornato con successo.";
+    if (intent === "generate-feed") {
+      feedStatus = "Generato correttamente";
+      successMessage = "Feed XML generato con successo.";
+    } else if (intent === "refresh-feed") {
+      feedStatus = "Aggiornato correttamente";
+      successMessage = "Feed XML aggiornato con successo.";
+    }
+
+    await prisma.feedState.upsert({
+      where: { shop: session.shop },
+      update: {
+        feedStatus,
+        feedUrl,
+        includedCount: dashboard.includedCount,
+        excludedCount: dashboard.excludedCount,
+        xmlContent,
+        lastGeneratedAt: now,
+      },
+      create: {
+        shop: session.shop,
+        feedStatus,
+        feedUrl,
+        includedCount: dashboard.includedCount,
+        excludedCount: dashboard.excludedCount,
+        xmlContent,
+        lastGeneratedAt: now,
+      },
+    });
+
+    return {
+      success: intent === "generate-feed" || intent === "refresh-feed",
+      successMessage,
+      feedStatus,
+      feedUrl,
+      lastUpdated: formatDateTime(now),
+      includedProducts: dashboard.includedCount,
+      excludedProducts: dashboard.excludedCount,
+      xmlPreview: xmlContent,
+      excludedPreview: dashboard.excludedPreview,
+      appError: "",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      successMessage: "",
+      feedStatus: "Errore generazione feed",
+      feedUrl: buildFeedUrl(session.shop),
+      lastUpdated: "Mai",
+      includedProducts: 0,
+      excludedProducts: 0,
+      xmlPreview: "",
+      excludedPreview: [],
+      appError:
+        error instanceof Error
+          ? error.message
+          : "Errore sconosciuto durante la generazione del feed.",
+    };
   }
-
-  await prisma.feedState.upsert({
-    where: { shop: session.shop },
-    update: {
-      feedStatus,
-      feedUrl,
-      includedCount: dashboard.includedCount,
-      excludedCount: dashboard.excludedCount,
-      xmlContent,
-      lastGeneratedAt: now,
-    },
-    create: {
-      shop: session.shop,
-      feedStatus,
-      feedUrl,
-      includedCount: dashboard.includedCount,
-      excludedCount: dashboard.excludedCount,
-      xmlContent,
-      lastGeneratedAt: now,
-    },
-  });
-
-  return {
-    success: intent === "generate-feed" || intent === "refresh-feed",
-    successMessage,
-    feedStatus,
-    feedUrl,
-    lastUpdated: formatDateTime(now),
-    includedProducts: dashboard.includedCount,
-    excludedProducts: dashboard.excludedCount,
-    xmlPreview: xmlContent,
-    excludedPreview: dashboard.excludedPreview,
-    appError: "",
-  };
 };
 
 export default function Index() {
