@@ -77,9 +77,7 @@ export async function action({ request }) {
           : "Generato correttamente",
     });
 
-    return {
-      ok: true,
-    };
+    return { ok: true };
   } catch (error) {
     const currentState = await getFeedState(session.shop);
 
@@ -109,6 +107,22 @@ function formatDate(value) {
   return date.toLocaleString("it-IT");
 }
 
+function buildReasonSummary(excludedProducts) {
+  const counts = new Map();
+
+  for (const product of excludedProducts || []) {
+    for (const error of product.errors || []) {
+      const key = String(error || "").trim();
+      if (!key) continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export default function AppDashboard() {
   const data = useLoaderData();
   const navigation = useNavigation();
@@ -119,6 +133,7 @@ export default function AppDashboard() {
     (data.excludedCount > 0 ? "Generato con esclusioni" : "Pronto");
 
   const hasExcluded = data.excludedProducts.length > 0;
+  const reasonSummary = buildReasonSummary(data.excludedProducts);
 
   return (
     <div style={styles.page}>
@@ -196,6 +211,29 @@ export default function AppDashboard() {
             )}
           </section>
 
+          <section style={styles.card}>
+            <h2 style={styles.sectionTitle}>Riepilogo esclusioni</h2>
+            <p style={styles.sectionText}>
+              Distribuzione dei motivi più frequenti per cui i prodotti vengono
+              esclusi dal feed.
+            </p>
+
+            {!hasExcluded ? (
+              <div style={styles.successSoftBox}>
+                Nessuna esclusione rilevata.
+              </div>
+            ) : (
+              <div style={styles.summaryGrid}>
+                {reasonSummary.map((item, index) => (
+                  <div key={`${item.label}-${index}`} style={styles.summaryCard}>
+                    <div style={styles.summaryCount}>{item.count}</div>
+                    <div style={styles.summaryLabel}>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section id="prodotti-esclusi" style={styles.card}>
             <h2 style={styles.sectionTitle}>Prodotti esclusi</h2>
             <p style={styles.sectionText}>
@@ -211,17 +249,18 @@ export default function AppDashboard() {
                 {data.excludedProducts.map((product, index) => (
                   <div key={`${product.id}-${index}`} style={styles.excludedCard}>
                     <div style={styles.excludedHeader}>
-                      <div>
+                      <div style={styles.excludedHeaderLeft}>
                         <div style={styles.productTitle}>{product.title}</div>
                         <div style={styles.productMeta}>
-                          SKU: {product.sku || "—"} • EAN: {product.ean || "—"}
+                          SKU: {product.sku || "—"} &nbsp;•&nbsp; EAN:{" "}
+                          {product.ean || "—"}
                         </div>
                       </div>
                       <div style={styles.excludedBadge}>Escluso</div>
                     </div>
 
                     <div style={styles.errorTagsWrap}>
-                      {product.errors.map((error, i) => (
+                      {(product.errors || []).map((error, i) => (
                         <span key={`${error}-${i}`} style={styles.errorTag}>
                           {error}
                         </span>
@@ -240,6 +279,11 @@ export default function AppDashboard() {
             <p style={styles.sideText}>
               Numeri rapidi e stato operativo del feed.
             </p>
+
+            <div style={styles.statCardBlue}>
+              <div style={styles.statLabel}>Prodotti inclusi</div>
+              <div style={styles.statNumberBlue}>{data.includedCount}</div>
+            </div>
 
             <div style={styles.statCardGreen}>
               <div style={styles.statLabel}>Prodotti esclusi</div>
@@ -280,8 +324,9 @@ export default function AppDashboard() {
           <section style={styles.sideCard}>
             <h3 style={styles.sideTitle}>Note</h3>
             <p style={styles.noteText}>
-              Il feed mantiene estensione <strong>.xml</strong>. I prodotti non
-              conformi vengono esclusi automaticamente e segnalati in dashboard.
+              Il feed mantiene estensione <strong>.xml</strong>. Se la spedizione
+              custom non viene trovata, il sistema usa il valore di default
+              configurato.
             </p>
           </section>
         </aside>
@@ -444,7 +489,6 @@ const styles = {
     border: "1px solid #cbd5e1",
     cursor: "pointer",
     fontFamily: FONT_STACK,
-    boxShadow: "none",
   },
   ghostButton: {
     display: "inline-flex",
@@ -522,6 +566,32 @@ const styles = {
     fontSize: "16px",
     fontFamily: FONT_STACK,
   },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "14px",
+  },
+  summaryCard: {
+    borderRadius: "18px",
+    border: "1px solid #e5e7eb",
+    background: "#f8fafc",
+    padding: "18px",
+  },
+  summaryCount: {
+    fontSize: "34px",
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: "8px",
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.03em",
+  },
+  summaryLabel: {
+    fontSize: "14px",
+    lineHeight: 1.45,
+    color: "#475569",
+    fontWeight: 700,
+    fontFamily: FONT_STACK,
+  },
   excludedList: {
     display: "flex",
     flexDirection: "column",
@@ -539,6 +609,10 @@ const styles = {
     gap: "16px",
     alignItems: "flex-start",
     marginBottom: "12px",
+  },
+  excludedHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
   },
   productTitle: {
     fontSize: "18px",
@@ -577,6 +651,13 @@ const styles = {
     border: "1px solid #fdba74",
     fontFamily: FONT_STACK,
   },
+  statCardBlue: {
+    borderRadius: "20px",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    padding: "16px",
+    marginBottom: "12px",
+  },
   statCardGreen: {
     borderRadius: "20px",
     border: "1px solid #86efac",
@@ -602,6 +683,14 @@ const styles = {
     fontSize: "52px",
     fontWeight: 900,
     color: "#065f46",
+    lineHeight: 1,
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.03em",
+  },
+  statNumberBlue: {
+    fontSize: "52px",
+    fontWeight: 900,
+    color: "#1d4ed8",
     lineHeight: 1,
     fontFamily: FONT_STACK,
     letterSpacing: "-0.03em",
