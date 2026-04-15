@@ -290,11 +290,16 @@ export default function AppDashboard() {
   );
 }
 
+const FONT_STACK =
+  '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
 const styles = {
   page: {
     padding: "24px",
     background: "#f3f5f7",
     minHeight: "100vh",
+    fontFamily: FONT_STACK,
+    color: "#0f172a",
   },
   grid: {
     maxWidth: "1240px",
@@ -320,6 +325,7 @@ const styles = {
     borderRadius: "28px",
     padding: "28px",
     boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+    fontFamily: FONT_STACK,
   },
   badge: {
     display: "inline-block",
@@ -330,13 +336,16 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.14)",
     fontSize: "13px",
     fontWeight: 700,
+    fontFamily: FONT_STACK,
+    letterSpacing: "0.01em",
   },
   heroTitle: {
     margin: "0 0 12px 0",
     fontSize: "34px",
-    lineHeight: 1.1,
+    lineHeight: 1.08,
     fontWeight: 800,
-    letterSpacing: "-0.02em",
+    letterSpacing: "-0.03em",
+    fontFamily: FONT_STACK,
   },
   heroText: {
     margin: 0,
@@ -344,6 +353,8 @@ const styles = {
     fontSize: "17px",
     lineHeight: 1.55,
     color: "rgba(255,255,255,0.92)",
+    fontFamily: FONT_STACK,
+    fontWeight: 500,
   },
   heroStatus: {
     marginTop: "22px",
@@ -354,6 +365,7 @@ const styles = {
     color: "#166534",
     fontWeight: 800,
     fontSize: "14px",
+    fontFamily: FONT_STACK,
   },
   card: {
     background: "#ffffff",
@@ -361,6 +373,7 @@ const styles = {
     padding: "22px",
     boxShadow: "0 8px 22px rgba(15, 23, 42, 0.05)",
     border: "1px solid #e5e7eb",
+    fontFamily: FONT_STACK,
   },
   sideCard: {
     background: "#ffffff",
@@ -368,30 +381,37 @@ const styles = {
     padding: "22px",
     boxShadow: "0 8px 22px rgba(15, 23, 42, 0.05)",
     border: "1px solid #e5e7eb",
+    fontFamily: FONT_STACK,
   },
   sectionTitle: {
     margin: "0 0 6px 0",
     fontSize: "20px",
     fontWeight: 800,
     color: "#0f172a",
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.02em",
   },
   sectionText: {
     margin: "0 0 18px 0",
     fontSize: "15px",
     lineHeight: 1.5,
     color: "#64748b",
+    fontFamily: FONT_STACK,
   },
   sideTitle: {
     margin: "0 0 6px 0",
     fontSize: "18px",
     fontWeight: 800,
     color: "#0f172a",
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.02em",
   },
   sideText: {
     margin: "0 0 18px 0",
     fontSize: "14px",
     lineHeight: 1.5,
     color: "#64748b",
+    fontFamily: FONT_STACK,
   },
   actionsRow: {
     display: "flex",
@@ -412,6 +432,7 @@ const styles = {
     fontSize: "15px",
     border: "none",
     boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
+    fontFamily: FONT_STACK,
   },
   secondaryButton: {
     padding: "14px 18px",
@@ -422,6 +443,8 @@ const styles = {
     fontSize: "15px",
     border: "1px solid #cbd5e1",
     cursor: "pointer",
+    fontFamily: FONT_STACK,
+    boxShadow: "none",
   },
   ghostButton: {
     display: "inline-flex",
@@ -435,6 +458,7 @@ const styles = {
     fontWeight: 800,
     fontSize: "15px",
     border: "1px solid #c7d2fe",
+    fontFamily: FONT_STACK,
   },
   infoBox: {
     border: "1px solid #dbe4ee",
@@ -448,12 +472,15 @@ const styles = {
     color: "#64748b",
     marginBottom: "8px",
     letterSpacing: "0.04em",
+    fontFamily: FONT_STACK,
   },
   infoValue: {
-    fontSize: "22px",
+    fontSize: "18px",
+    lineHeight: 1.45,
     fontWeight: 800,
     color: "#0f172a",
     wordBreak: "break-word",
+    fontFamily: FONT_STACK,
   },
   successBox: {
     borderRadius: "18px",
@@ -463,6 +490,7 @@ const styles = {
     color: "#166534",
     fontWeight: 800,
     fontSize: "16px",
+    fontFamily: FONT_STACK,
   },
   successSoftBox: {
     borderRadius: "18px",
@@ -472,6 +500,7 @@ const styles = {
     color: "#166534",
     fontWeight: 800,
     fontSize: "18px",
+    fontFamily: FONT_STACK,
   },
   warningBox: {
     borderRadius: "18px",
@@ -481,6 +510,7 @@ const styles = {
     color: "#9a3412",
     fontWeight: 800,
     fontSize: "16px",
+    fontFamily: FONT_STACK,
   },
   errorBox: {
     borderRadius: "18px",
@@ -490,6 +520,7 @@ const styles = {
     color: "#991b1b",
     fontWeight: 800,
     fontSize: "16px",
+    fontFamily: FONT_STACK,
   },
   excludedList: {
     display: "flex",
@@ -514,10 +545,12 @@ const styles = {
     fontWeight: 800,
     color: "#0f172a",
     marginBottom: "4px",
+    fontFamily: FONT_STACK,
   },
   productMeta: {
     fontSize: "14px",
     color: "#64748b",
+    fontFamily: FONT_STACK,
   },
   excludedBadge: {
     padding: "8px 12px",
@@ -527,6 +560,7 @@ const styles = {
     fontWeight: 800,
     fontSize: "13px",
     whiteSpace: "nowrap",
+    fontFamily: FONT_STACK,
   },
   errorTagsWrap: {
     display: "flex",
@@ -541,6 +575,7 @@ const styles = {
     fontWeight: 700,
     fontSize: "13px",
     border: "1px solid #fdba74",
+    fontFamily: FONT_STACK,
   },
   statCardGreen: {
     borderRadius: "20px",
@@ -561,28 +596,36 @@ const styles = {
     fontWeight: 800,
     color: "#64748b",
     marginBottom: "8px",
+    fontFamily: FONT_STACK,
   },
   statNumber: {
     fontSize: "52px",
     fontWeight: 900,
     color: "#065f46",
     lineHeight: 1,
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.03em",
   },
   planValue: {
     fontSize: "24px",
     fontWeight: 900,
     color: "#0f172a",
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.02em",
   },
   datetimeValue: {
     fontSize: "20px",
     fontWeight: 900,
     color: "#0f172a",
     lineHeight: 1.25,
+    fontFamily: FONT_STACK,
+    letterSpacing: "-0.02em",
   },
   statusValue: {
     fontSize: "18px",
     fontWeight: 900,
     color: "#0f172a",
+    fontFamily: FONT_STACK,
   },
   reqItem: {
     borderRadius: "16px",
@@ -593,11 +636,13 @@ const styles = {
     fontSize: "16px",
     fontWeight: 800,
     color: "#0f172a",
+    fontFamily: FONT_STACK,
   },
   noteText: {
     margin: 0,
     fontSize: "15px",
     lineHeight: 1.6,
     color: "#475569",
+    fontFamily: FONT_STACK,
   },
 };
